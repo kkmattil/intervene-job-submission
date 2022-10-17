@@ -11,8 +11,6 @@ import datetime
 import time
 import sys
 import re
-from keystoneauth1 import session
-from keystoneauth1.identity import v3
 import os
 import swiftclient
 from swiftclient.multithreading import OutputManager
@@ -21,6 +19,21 @@ import getpass
 
 ############################################################################
 ##upload a large file
+
+
+def get_task_json(target_task):
+    task_json_link=("jobs/"+_user+"/"+target_task+"/task.json")
+    task_json=conn.get_object(bucket, task_json_link)[1]
+    task_description=json.loads(task_json)
+    return task_description
+
+def get_task_json_biobank(target_task, biobank):
+    task_json_link=("jobs/"+_user+"/"+target_task+"/"+biobank+"/task.json")
+    task_json=conn.get_object(bucket, task_json_link)[1]
+    task_description=json.loads(task_json)
+    return task_description
+
+
 def upload_large_file(bucket_name, object_name):
     # limit upload threads to 4
                 opts = {'object_uu_threads': 4, 'os_auth_url' : _authurl, 'os_username' : _user, 'os_password' : _key, 'os_project_name' : _project, 'os_project_domain_name' : 'Default' } 
@@ -135,10 +148,9 @@ def set_pgsc_calc_parameters():
 ###
 #parameters for job file
 def upload_new_task(_user,conn):
+   taskname=input("Give a name for your task:")
    print("\n")
-   taskname=input("Give a name for your task:\n")
-   print("\n")
-   email=input("contact email\n")
+   email=input("contact email")
    available_biobanks=["HUS", "Estonia_Biobank"]
    jobid=(str(int(time.time()))+"-"+_user)
    workdir=(_user+"/"+str(jobid))
@@ -247,55 +259,131 @@ def upload_new_task(_user,conn):
    #create task directories and files for each biobank
    for biobank in available_biobanks:
 
-     job_file_name="task.json"
+       job_file_name="task.json"
 
-     outputs= []
-     for ofile in output_names: 
-        o_item= {
-         "url" :  (bucket+"/jobs/"+workdir+"/"+biobank+"/results/"+ofile),
-         "path" : ("./"+ofile)
-         }
-        outputs.append(o_item)
+       outputs= []
+       for ofile in output_names: 
+          o_item= {
+           "bucket": bucket,  
+           "object": ("jobs/"+workdir+"/"+biobank+"/results/"+ofile),
+           "url" :  (bucket+"/jobs/"+workdir+"/"+biobank+"/results/"+ofile),
+           "path" : ("./"+ofile)
+           }
+          outputs.append(o_item)
 
-     task_json = {"ID": jobid,
-       "name": taskname,
-       "descripotion": "none",
-       "csc-user": _user,
-       "requestor": email,
-       "date": str(datetime.datetime.now()),
-       "diobanks": available_biobanks,
-       "requirements": requirements,
-       "storageserver": storage,
-       "inputs": inputs,        
-       "outputs": outputs,
-       "instructions": instructions    
-       }     
+       task_json = {"ID": jobid,
+         "name": taskname,
+         "descripotion": "none",
+         "csc-user": _user,
+         "requestor": email,
+         "date": str(datetime.datetime.now()),
+         "biobanks": available_biobanks,
+         "requirements": requirements,
+         "storageserver": storage,
+         "inputs": inputs,        
+         "outputs": outputs,
+         "instructions": instructions    
+        }     
     
-     print("Uploading job "+jobid+" to "+bucket+" for "+biobank)
+       print("Uploading job "+jobid+" to "+bucket+" for "+biobank)
 
-     #move object to allas
-     object_dir=("jobs/"+workdir+"/"+biobank)
-     object_name=(object_dir+"/"+job_file_name)
-     conn.put_object(bucket, object_name, contents=json.dumps(task_json, indent=2), content_type='text/plain')
+       #move object to allas
+       object_dir=("jobs/"+workdir+"/"+biobank)
+       object_name=(object_dir+"/"+job_file_name)
+       conn.put_object(bucket, object_name, contents=json.dumps(task_json, indent=2), content_type='text/plain')
    
-     #   copy_large_file(object_dir, job_file_name)
-     full_allas_path=(object_dir+"/"+job_file_name)
+       #   copy_large_file(object_dir, job_file_name)
+       full_allas_path=(object_dir+"/"+job_file_name)
 
-     #create status object
-     status_object=("jobs/"+workdir+"/"+biobank+"/status/submitted")
-     conn.put_object(bucket, status_object ,
+       #create status object
+       status_object=("jobs/"+workdir+"/"+biobank+"/status/submitted")
+       conn.put_object(bucket, status_object ,
                     contents=(task_json["date"]),
                     content_type='text/plain')
    
-     #make a note file for biobak.
-     note_object=(biobank+"/requests/"+jobid)
-     conn.put_object(bucket, note_object ,
+       #make a note file for biobak.
+       note_object=(biobank+"/requests/"+jobid)
+       conn.put_object(bucket, note_object ,
                     contents=(full_allas_path),
                     content_type='text/plain')
+   
+   #add common json file
+   object_name=("jobs/"+workdir+"/task.json") 
+   conn.put_object(bucket, object_name, contents=json.dumps(task_json, indent=2), content_type='text/plain')
+
+def update_task_lists(conn):
+   #this function returns updated my_tasks list and task_status_info that 
+   # is a list of dictionaries
+   #list all objects in the bucket
+   all_objs=conn.get_container(bucket)[1] 
+   #print("Debug1:")
+   #print(all_objs)
+   my_tasks=[]
+   task_status_info=[]
+   task_status_dict={}
+   if len(all_objs) == 0 :
+     return(my_tasks,task_status_info)
+   
+   print("Collecting task information.")
+
+   for j in all_objs:
+      if re.search("jobs/"+_user+"/", j["name"] ):
+         #if re.search("/status/", j["name"] ):
+         task_row=(j["name"])
+         #print("Task row: "+task_row)
+         task=task_row.split("/")[2]
+         if task not in my_tasks:
+            my_tasks.append(task)  
+            #print("Adding:"+task)  
+        
+         
+   #print("Debug 3 ")
+   #print(my_tasks)      
+   for task in my_tasks:
+      task_desc=get_task_json(task)
+      biobanks=task_desc["biobanks"]
+      #print(task+" : ")
+      #print(biobanks)
+      task_status_dict={"id": task}
+      #print("Evaluating "+task+" in ")
+      #print(biobanks)
+      for biobank in biobanks:
+          
+         task_stat_num=0
+         # check all object for given biobank and task combibation
+         for jj in all_objs:
+            if re.search(task+"/"+biobank+"/status/ready", jj["name"]):
+               task_stat_num=task_stat_num+4
+               #print(jj["name"]+" ready"+task_stat_num)
+            if re.search(task+"/"+biobank+"/status/processing", jj["name"]):
+               task_stat_num=task_stat_num+2
+               #print(jj["name"]+" proc")
+            if re.search(task+"/"+biobank+"/status/submitted", jj["name"]):
+               task_stat_num=task_stat_num+1
+               #print(jj["name"]+" submitted")
+
+         # infer the status of tasks based on checks
+         if task_stat_num==7 or task_stat_num==5 or task_stat_num==4:
+            task_status_dict[biobank]="ready"
+            #print("Debug:"+task+" "+biobank+"ready")
+         if task_stat_num==3:
+            task_status_dict[biobank]="processing"
+            
+         if task_stat_num==1:
+            task_status_dict[biobank]="submitted" 
+         
+         
+            
+
+      task_status_info.append(task_status_dict)      
+      
+   return(my_tasks,task_status_info)
+
+
 
 ####################################################################
 # Main program starts here
-
+#
 
 
 #parameters for allas connection
@@ -304,7 +392,6 @@ _authurl = 'https://pouta.csc.fi:5001/v3'
 _auth_version = '3'
 _user = input('CSC username: \n')
 _key = getpass.getpass('CSC password: \n')
-
 
 
 _os_options = {
@@ -325,45 +412,57 @@ bucket=(_project+"-intervene-tasks")
 
 dothis = "start"
 
+#####################
 
+
+##List my tasks
+my_tasks=[]
+task_selection_dict = {}
+task_download_dict= {}
+task_upload_dict={}
+
+################
+my_tasks, task_status_info = update_task_lists(conn)
 
 job_operations = {}
 job_operations['list'] = 'list'
 job_operations['submit'] = 'submit'
 job_operations['download'] = 'download'
 job_operations['delete'] = 'delete'
+job_operations['update task list'] = 'update task list'
 job_operations['quit'] = 'quit'
-
+#biobanks=["HUS","Estonia_Biobank"]
 
 while dothis != "quit":
 
-  dothis=selectFromDict(job_operations, "Select task")
+  dothis=selectFromDict(job_operations, "task")
+
+  if dothis == "update task list":
+       my_tasks, task_status_info = update_task_lists(conn)
 
 
   if dothis == "list":
       ##List my tasks
       print("Tasks submitted by user "+_user)
-      for j in conn.get_container(bucket)[1]:
-         if re.search("jobs/"+_user, j["name"] ):
-           if re.search("/status/", j["name"] ):
-              print(j["name"])
+      for task_status_dict in task_status_info:
+          print("Task:"+task_status_dict["id"])
+          task_desc=get_task_json(task_status_dict["id"])
+          biobanks=task_desc["biobanks"]
+          for biobank in biobanks:
+              #print out status of each biobank
+              print("           "+biobank+": "+task_status_dict[biobank])
+          print(" ")    
               
   if dothis == "submit":
       upload_new_task(_user, conn)
-
+      my_tasks, task_status_info = update_task_lists(conn)
+ 
+    
   if dothis == "delete":
-      previous_jobid="x"
+      #previous_jobid="x"
       job_dict = {}
-      print("Tasks submitted by user "+_user)
-      for j in conn.get_container(bucket)[1]:
-        if re.search("jobs/"+_user, j["name"] ):
-          if re.search("/status/", j["name"] ):
-              job_status_objects=(j["name"])
-              new_jobid=job_status_objects.split("/")[3]            
-              if new_jobid != previous_jobid:
-                 job_dict[new_jobid] = new_jobid
-                 
-              previous_jobid = new_jobid
+      for jobid in my_tasks:
+          job_dict[jobid] = jobid
               
       job_dict["None"] = "None"
       jobid=selectFromDict(job_dict, "Select task")          
@@ -374,20 +473,61 @@ while dothis != "quit":
            if re.search(jobid, j["name"]):      
                print("Deleting object "+j["name"])
                conn.delete_object(bucket,j["name"])
-   ##with open(job_file_name, "w") as outfile:
-   #     json.dump(task_json, outfile, indent=2)
-   #     outfile.close()
-   #
-   #
-   ##make a note file for biobak.
-   #job_file_name=(jobid)
-   #with open(job_file_name, "w") as outfile:
-       # outfile.write(task_json["Date"])
-       # outfile.write(" "+os.uname()[1])
-       # outfile.write("\n")
-      #    outfile.write(full_allas_path)
-      #  outfile.write("\n")
-       # outfile.close
+ 
+      # update task list after deleting
+      my_tasks, task_status_info = update_task_lists(conn)
+        
+      
+  if dothis == "download":
+     print("Listing ready tasks") 
+     tasks_ready=[]
+     # check taks that are ready  for download
+     my_tasks, task_status_info = update_task_lists(conn)
+     for task_status_dict in task_status_info:
+         task=task_status_dict["id"]
+         #print("Task:"+task)
+         task_desc=get_task_json(task)
+         biobanks=task_desc["biobanks"]
+         non_ready_biobanks=0
+         ready_biobanks=0
+         for biobank in biobanks:
+             #print out status of each biobank
+             if task_status_dict[biobank] != "ready":
+                non_ready_biobanks=(non_ready_biobanks + 1)
+             if task_status_dict[biobank] == "ready":
+                ready_biobanks=(ready_biobanks +1 )
+         if non_ready_biobanks == 0 :
+            tasks_ready.append(task)
+            print(task+" ready") 
+         else:
+            print(task+" "+str(ready_biobanks)+" bioanks ready. " +str(non_ready_biobanks)+" biobanks missing." )
+     
+        
+     task_download_dict={}
+     for task in tasks_ready:
+          task_download_dict[task]=task        
+    
+     task_download_dict["none"]="none"
+     download_task=selectFromDict(task_download_dict, "task")
 
-   #object_dir=(bucket+"/"+biobank+"/requests")
-   #copy_large_file(object_dir, job_file_name)
+     # Download the output files or selected task
+     if download_task != "none":         
+        task_desc=get_task_json(download_task)       
+        downloaddir=download_task
+        isExist = os.path.exists(downloaddir)
+        #print("Dir test")
+        if not isExist:
+           # Create a new directory because it does not exist
+           os.makedirs(downloaddir)
+        for biobank in task_desc["biobanks"]:
+          #create biobank specific subdeirectories
+          isExist = os.path.exists(downloaddir+"/"+biobank)
+          if not isExist:
+             os.makedirs(downloaddir+"/"+biobank)
+             task_biobank_desc=get_task_json_biobank(download_task, biobank)
+          for output_file in task_biobank_desc["outputs"]:
+             print(" ")
+             print("Downloading "+output_file["url"]+" to "+download_task+"/"+biobank+"/"+output_file["path"])
+             download_large_file(bucket, output_file["object"], download_task+"/"+biobank+"/"+output_file["path"])
+     
+
