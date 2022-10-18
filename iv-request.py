@@ -9,7 +9,6 @@ Created on Mon Sep 26 08:44:21 2022
 import json
 import datetime
 import time
-import sys
 import re
 import os
 import swiftclient
@@ -36,19 +35,25 @@ def get_task_json_biobank(target_task, biobank):
 
 def upload_large_file(bucket_name, object_name):
     # limit upload threads to 4
-                opts = {'object_uu_threads': 4, 'os_auth_url' : _authurl, 'os_username' : _user, 'os_password' : _key, 'os_project_name' : _project, 'os_project_domain_name' : 'Default' } 
-                with SwiftService(options=opts) as swift:
-                    for r in swift.upload(bucket_name, [ object_name ], { 'segment_size': 5000000000}):
-                        if r['success']:
-                            if 'object' in r:
-                                print(r['object'])
-                            elif 'for_object' in r:
-                                print(
-                                    '%s segment %s' % (r['for_object'],
+    if os.path.isfile(object_name):
+       #limit upload threads to 4
+       opts = {'object_uu_threads': 4, 'os_auth_url' : _authurl, 'os_username' : _user, 'os_password' : _key, 'os_project_name' : _project, 'os_project_domain_name' : 'Default' } 
+       with SwiftService(options=opts) as swift:
+           for r in swift.upload(bucket_name, [ object_name ], { 'segment_size': 5000000000}):
+               if r['success']:
+                  if 'object' in r:
+                     print(r['object'])
+                  elif 'for_object' in r:
+                     print(
+                         '%s segment %s' % (r['for_object'],
                                         r['segment_index'])
                                     )
-                        else:
-                            print(r)
+               else:
+                  print(r)
+    else:
+       print("ERROR: File "+object_name+" not found.")
+       exit()
+              
                             
 def download_large_file(bucket_name, object_name, out_file):
     # limit upload threads to 4
@@ -78,14 +83,17 @@ def selectFromDict(options, name):
   inputValid = False
   while not inputValid:
      inputRaw = input(name + ': ')
-     inputNo = int(inputRaw) - 1
-     if inputNo > -1 and inputNo < len(indexValidList):
-         selected = indexValidList[inputNo]
-         print('Selected ' +  name + ': ' + selected)
-         inputValid = True
-         break
+     if str.isdigit(inputRaw):
+       inputNo = int(inputRaw) - 1
+       if inputNo > -1 and inputNo < len(indexValidList):
+           selected = indexValidList[inputNo]
+           print('Selected ' +  name + ': ' + selected)
+           inputValid = True
+           break
+       else:
+           print('Please select a valid ' + name + ' number')
      else:
-         print('Please select a valid ' + name + ' number')
+        print(inputRaw+" is not a valid selection. Please select again. " )  
   return selected
 
 ###
@@ -142,7 +150,23 @@ def set_pgsc_calc_parameters():
       ]
       return(inputs, output_names, instructions, requirements)
       
-
+def select_biobanks():
+    all_biobanks=["HUS", "Estonia_Biobank", "HUNT", "FIMM"]
+    print("Select target biobanks:")
+    run_selection=True
+    while run_selection: 
+      selected_biobanks=[]
+      for biobank in all_biobanks:
+           ansver=input("Include biobank "+biobank+"(y/n)?")
+           if ansver == "y" or ansver == "Y" or ansver == "yes":
+               selected_biobanks.append(biobank)
+      print("Selected biobanks:")
+      print(selected_biobanks)
+      ansver=input("Is this section OK(y/n)?")
+      if ansver == "y" or ansver == "Y" or ansver == "yes":
+          run_selection=False
+    
+    return(selected_biobanks)
 
 
 ###
@@ -150,8 +174,9 @@ def set_pgsc_calc_parameters():
 def upload_new_task(_user,conn):
    taskname=input("Give a name for your task:")
    print("\n")
-   email=input("contact email")
-   available_biobanks=["HUS", "Estonia_Biobank"]
+   email=input("Give contact email address: ")
+   available_biobanks=select_biobanks()
+   #available_biobanks=["HUS", "Estonia_Biobank"]
    jobid=(str(int(time.time()))+"-"+_user)
    workdir=(_user+"/"+str(jobid))
    storage="allas"
@@ -205,6 +230,7 @@ def upload_new_task(_user,conn):
            input_file=input("Give new input data file: ")
            print("\n")
            if input_file != "":
+               
                upload_large_file(bucket+"/"+pseudofolder, input_file)
                input_definition={
                "name": input_file,

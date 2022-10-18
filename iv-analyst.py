@@ -80,14 +80,17 @@ def selectFromDict(options, name):
   inputValid = False
   while not inputValid:
      inputRaw = input(name + ': ')
-     inputNo = int(inputRaw) - 1
-     if inputNo > -1 and inputNo < len(indexValidList):
-         selected = indexValidList[inputNo]
-         print('Selected ' +  name + ': ' + selected)
-         inputValid = True
-         break
+     if str.isdigit(inputRaw):
+       inputNo = int(inputRaw) - 1
+       if inputNo > -1 and inputNo < len(indexValidList):
+           selected = indexValidList[inputNo]
+           print('Selected ' +  name + ': ' + selected)
+           inputValid = True
+           break
+       else:
+           print('Please select a valid ' + name + ' number')
      else:
-         print('Please select a valid ' + name + ' number')
+        print(inputRaw+" is not a valid selection. Please select again. " )  
   return selected
 
 
