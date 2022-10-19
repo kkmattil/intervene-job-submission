@@ -72,6 +72,7 @@ def download_large_file(bucket_name, object_name, out_file):
                             print(r)
 ##
 ##Subroutine to manage selection from several options
+#Subroutine to manage selection from several options
 def selectFromDict(options, name):
   index = 0
   indexValidList = []
@@ -95,6 +96,7 @@ def selectFromDict(options, name):
      else:
         print(inputRaw+" is not a valid selection. Please select again. " )  
   return selected
+
 
 ###
 ##parameters for prs-pipe
