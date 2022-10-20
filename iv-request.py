@@ -19,20 +19,21 @@ import getpass
 ############################################################################
 ##upload a large file
 
-
+#return job description information as a python dictionary
 def get_task_json(target_task):
     task_json_link=("jobs/"+_user+"/"+target_task+"/task.json")
     task_json=conn.get_object(bucket, task_json_link)[1]
     task_description=json.loads(task_json)
     return task_description
 
+#return biobank specific job description information as a python dictionary
 def get_task_json_biobank(target_task, biobank):
     task_json_link=("jobs/"+_user+"/"+target_task+"/"+biobank+"/task.json")
     task_json=conn.get_object(bucket, task_json_link)[1]
     task_description=json.loads(task_json)
     return task_description
 
-
+#Upload process that allows uploading over 5 GB files
 def upload_large_file(bucket_name, object_name):
     # limit upload threads to 4
     if os.path.isfile(object_name):
@@ -54,24 +55,23 @@ def upload_large_file(bucket_name, object_name):
        print("ERROR: File "+object_name+" not found.")
        exit()
               
-                            
+#Download process that allows downloading over 5 GB files                            
 def download_large_file(bucket_name, object_name, out_file):
     # limit upload threads to 4
-                opts = {'object_uu_threads': 4, 'os_auth_url' : _authurl, 'os_username' : _user, 'os_password' : _key, 'os_project_name' : _project, 'os_project_domain_name' : 'Default', 'out_file' : out_file } 
-                with SwiftService(options=opts) as swift:
-                    for r in swift.download(bucket_name, [ object_name ]):
-                        if r['success']:
-                            if 'object' in r:
-                                print(r['object'])
-                            elif 'for_object' in r:
-                                print(
-                                    '%s segment %s' % (r['for_object'],
+    opts = {'object_uu_threads': 4, 'os_auth_url' : _authurl, 'os_username' : _user, 'os_password' : _key, 'os_project_name' : _project, 'os_project_domain_name' : 'Default', 'out_file' : out_file } 
+    with SwiftService(options=opts) as swift:
+        for r in swift.download(bucket_name, [ object_name ]):
+            if r['success']:
+               if 'object' in r:
+                   print(r['object'])
+               elif 'for_object' in r:
+                   print(
+                       '%s segment %s' % (r['for_object'],
                                         r['segment_index'])
                                     )
-                        else:
-                            print(r)
-##
-##Subroutine to manage selection from several options
+            else:
+                print(r)
+
 #Subroutine to manage selection from several options
 def selectFromDict(options, name):
   index = 0
@@ -99,7 +99,7 @@ def selectFromDict(options, name):
 
 
 ###
-##parameters for prs-pipe
+##parameters for prs-pipe test run
 def set_prspipe_parameters():
      
       #     inputs=["2004504-prspipe/prspipe_8.7.22.tar"]
@@ -107,7 +107,7 @@ def set_prspipe_parameters():
         {
         "name": "infile",
         "description": "tar-package containing all data neede",
-        "bucket": "2004504-prspip",
+        "bucket": "2004504-prspipe",
         "object": "prspipe_8.7.22.tar",
         "url":  "/2004504-prspipe/prspipe_8.7.22.tar",
         "path": "./prspipe_8.7.22.tar",
@@ -125,7 +125,7 @@ def set_prspipe_parameters():
       
       return(inputs, output_names, instructions, requirements)
   
-
+## parameters for pgsc_calc test run
 def set_pgsc_calc_parameters():
       requirements=["singularity", "nextflow"]
       #     inputs=["2004504-prspipe/prspipe_8.7.22.tar"]
@@ -151,9 +151,10 @@ def set_pgsc_calc_parameters():
       }   
       ]
       return(inputs, output_names, instructions, requirements)
-      
+
+## tool to pick target biobanks       
 def select_biobanks():
-    all_biobanks=["HUS", "Estonia_Biobank", "HUNT", "FIMM"]
+    all_biobanks=["HUS", "Estonia_Biobank", "HUNT", "FIMM", "CSC testing only"]
     print("Select target biobanks:")
     run_selection=True
     while run_selection: 
@@ -182,6 +183,7 @@ def upload_new_task(_user,conn):
    jobid=(str(int(time.time()))+"-"+_user)
    workdir=(_user+"/"+str(jobid))
    storage="allas"
+   general_task_description="none"
    print("\n")
    # Currently availalble tasks
    available_tasks = {}
@@ -192,15 +194,16 @@ def upload_new_task(_user,conn):
    tasktype=selectFromDict(available_tasks, "Select analysis pipeline")
    
    if tasktype == "prspipe":
+      general_task_description="Predefined PRSPIPE fucntionality test."
       task_parameters=set_prspipe_parameters()
       inputs=task_parameters[0]
       output_names=task_parameters[1]
       instructions=task_parameters[2]
       requirements=task_parameters[3]
    
-   if tasktype == "pgsc_calc": 
+   if tasktype == "pgsc_calc":
+      general_task_description="Predefined PGSC_CALC fucntionality test."
       task_parameters=set_pgsc_calc_parameters()
-      
       inputs=task_parameters[0]
       output_names=task_parameters[1]
       instructions=task_parameters[2]
@@ -221,6 +224,7 @@ def upload_new_task(_user,conn):
       inputs.append(input_definition)
       
    if tasktype == "other":
+       general_task_description="User specified task"
        pseudofolder=("jobs/"+workdir+"/input")
        #Define input files
        inputs = []
@@ -301,7 +305,7 @@ def upload_new_task(_user,conn):
 
        task_json = {"ID": jobid,
          "name": taskname,
-         "descripotion": "none",
+         "description": general_task_description,
          "csc-user": _user,
          "requestor": email,
          "date": str(datetime.datetime.now()),
@@ -460,9 +464,7 @@ job_operations['delete'] = 'delete'
 job_operations['update task list'] = 'update task list'
 job_operations['quit'] = 'quit'
 #biobanks=["HUS","Estonia_Biobank"]
-
 while dothis != "quit":
-
   dothis=selectFromDict(job_operations, "task")
 
   if dothis == "update task list":

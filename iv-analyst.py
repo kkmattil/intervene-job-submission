@@ -99,7 +99,7 @@ def update_biobank_tasks(conn,biobank):
    #list all objects in the bucket
    all_objs=conn.get_container(bucket)[1] 
    my_tasks=[]
-   print("Collecting task infomration.\n")
+   print("Collecting task information.\n")
    for j in all_objs:
       if re.search(biobank+"/requests/", j["name"] ):
          #if re.search("/status/", j["name"] ):
