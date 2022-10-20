@@ -259,10 +259,10 @@ while operation != "quit":
           print(" ")
           download_large_file(input_file["bucket"], input_file["object"], target_task+"/"+input_file["path"])
  
-      print("get instuctions")
+      print("get instructions")
       # instuctions file    
       for input_file in task_description["instructions"]:
-          download_large_file(input_file["bucket"], input_file["object"], target_task+"/README_instructions")
+          download_large_file(input_file["bucket"], input_file["object"], target_task+input_file["object"])
    
           #    print(input_file["url"]+"->"+target_task+"/"+input_file["path"])
           #   print("\n")
@@ -283,7 +283,7 @@ while operation != "quit":
    
       my_tasks, ready_tasks, tasks_processing, waiting_tasks, task_selection_dict, task_upload_dict, task_download_dict = update_biobank_tasks(conn,biobank)
       print("Job downloaded to local directory "+target_task)
-      print("Task specific instaructions are available in: "+target_task+"/README_instructions")
+      print("Task specific instructions are available in: "+target_task+"/README_instructions")
         
    #
    # uoload a ready task
@@ -291,7 +291,7 @@ while operation != "quit":
    if operation == "upload":
        
        target_task=input('Task to upload: \n')
-       task_description=get_task_json(task)
+       task_description=get_task_json(target_task)
        #target_task=selectFromDict(task_download_dict, "Task to be uploaded for processing.")
        
        print("Cheking result files.")     
